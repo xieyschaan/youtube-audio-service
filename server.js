@@ -94,16 +94,40 @@ app.post('/extract-audio', async (req, res) => {
       return res.status(500).json({ error: 'No audio format available for this video' });
     }
 
-    // Return the audio URL
-    res.json({
-      downloadUrl: audioFormat.url,
-      title: videoInfo.videoDetails.title,
-      duration: videoInfo.videoDetails.lengthSeconds,
-      format: {
-        mimeType: audioFormat.mimeType,
-        bitrate: audioFormat.bitrate,
+    // Stream audio directly instead of returning URL to avoid 403 errors
+    // Set proper headers for the audio stream
+    const audioResponse = await fetch(audioFormat.url, {
+      headers: {
+        'Referer': url,
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Origin': 'https://www.youtube.com',
       }
     });
+
+    if (!audioResponse.ok) {
+      // If direct streaming fails, fallback to returning URL
+      console.log('Direct streaming failed, returning URL instead');
+      return res.json({
+        downloadUrl: audioFormat.url,
+        title: videoInfo.videoDetails.title,
+        duration: videoInfo.videoDetails.lengthSeconds,
+        format: {
+          mimeType: audioFormat.mimeType,
+          bitrate: audioFormat.bitrate,
+        }
+      });
+    }
+
+    // Stream the audio directly - this avoids 403 errors
+    res.setHeader('Content-Type', audioFormat.mimeType || 'audio/webm');
+    res.setHeader('Content-Disposition', `attachment; filename="audio.webm"`);
+    const contentLength = audioResponse.headers.get('content-length');
+    if (contentLength) {
+      res.setHeader('Content-Length', contentLength);
+    }
+    
+    // Pipe the audio stream to the response
+    audioResponse.body.pipe(res);
 
   } catch (error) {
     console.error('Error extracting audio:', error);
