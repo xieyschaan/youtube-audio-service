@@ -44,11 +44,18 @@ if (typeof File === 'undefined') {
 }
 
 const express = require('express');
-const { stream } = require('play-dl');
+const YTDlpWrap = require('yt-dlp-wrap').default;
 const cors = require('cors');
+const fs = require('fs');
+const path = require('path');
+const { Readable } = require('stream');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Initialize yt-dlp-wrap
+// It will automatically download yt-dlp binary if not present
+const ytDlpWrap = new YTDlpWrap();
 
 // Enable CORS for Supabase Edge Functions
 app.use(cors());
@@ -76,21 +83,24 @@ app.post('/extract-audio', async (req, res) => {
     console.log(`Extracting audio from: ${url}`);
 
     try {
-      // Use play-dl to stream audio - it's more resistant to YouTube's bot detection
-      console.log('Streaming audio using play-dl...');
+      // Use yt-dlp to extract audio - it's the most robust against YouTube's bot detection
+      console.log('Extracting audio using yt-dlp...');
       
-      // Get audio stream from play-dl
-      const audioStream = await stream(url, {
-        quality: 2, // High quality audio
-        discordPlayerCompatibility: false,
-      });
+      // Use yt-dlp to get audio stream
+      // yt-dlp-wrap can stream directly, but we'll use execStream for better control
+      const audioStream = ytDlpWrap.execStream([
+        url,
+        '-f', 'bestaudio/best', // Best audio format
+        '--no-playlist', // Don't download playlists
+        '-o', '-', // Output to stdout
+      ]);
       
       // Set response headers for audio streaming
       res.setHeader('Content-Type', 'audio/webm');
       res.setHeader('Content-Disposition', `attachment; filename="audio.webm"`);
       
       // Handle stream errors
-      audioStream.stream.on('error', (error) => {
+      audioStream.on('error', (error) => {
         console.error('Stream error:', error);
         if (!res.headersSent) {
           res.status(500).json({ 
@@ -101,7 +111,7 @@ app.post('/extract-audio', async (req, res) => {
       });
       
       // Pipe the stream directly to response
-      audioStream.stream.pipe(res);
+      audioStream.pipe(res);
       
       // Note: We don't return here - the stream will handle the response
       return;
@@ -135,14 +145,16 @@ app.get('/extract-audio', async (req, res) => {
       return res.status(400).json({ error: 'Invalid YouTube URL' });
     }
 
-    // Use play-dl to stream audio
-    const audioStream = await stream(url, {
-      quality: 2,
-      discordPlayerCompatibility: false,
-    });
+    // Use yt-dlp to stream audio
+    const audioStream = ytDlpWrap.execStream([
+      url,
+      '-f', 'bestaudio/best',
+      '--no-playlist',
+      '-o', '-',
+    ]);
     
     res.setHeader('Content-Type', 'audio/webm');
-    audioStream.stream.pipe(res);
+    audioStream.pipe(res);
 
   } catch (error) {
     console.error('Error:', error);

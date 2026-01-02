@@ -11,7 +11,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
-    "play-dl": "^2.6.2",
+    "yt-dlp-wrap": "^2.6.0",
     "cors": "^2.8.5",
     "express": "^4.18.2"
   },
