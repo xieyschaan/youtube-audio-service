@@ -44,7 +44,7 @@ if (typeof File === 'undefined') {
 }
 
 const express = require('express');
-const ytdl = require('@distube/ytdl-core');
+const { stream } = require('play-dl');
 const cors = require('cors');
 
 const app = express();
@@ -68,54 +68,29 @@ app.post('/extract-audio', async (req, res) => {
       return res.status(400).json({ error: 'URL is required' });
     }
 
-    // Validate YouTube URL
-    if (!ytdl.validateURL(url)) {
+    // Validate YouTube URL (basic check)
+    if (!url || !url.includes('youtube.com') && !url.includes('youtu.be')) {
       return res.status(400).json({ error: 'Invalid YouTube URL' });
     }
 
     console.log(`Extracting audio from: ${url}`);
 
-    // Get video info
-    const videoInfo = await ytdl.getInfo(url, {
-      requestOptions: {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        }
-      }
-    });
-
-    // Find best audio format
-    const audioFormat = ytdl.chooseFormat(videoInfo.formats, {
-      quality: 'highestaudio',
-      filter: 'audioonly',
-    });
-
-    if (!audioFormat || !audioFormat.url) {
-      return res.status(500).json({ error: 'No audio format available for this video' });
-    }
-
-    // Use ytdl-core's built-in streaming to avoid 403 errors
-    // This handles headers and authentication automatically
     try {
-      console.log('Streaming audio using ytdl-core...');
+      // Use play-dl to stream audio - it's more resistant to YouTube's bot detection
+      console.log('Streaming audio using play-dl...');
       
-      // Set response headers for audio streaming
-      res.setHeader('Content-Type', audioFormat.mimeType || 'audio/webm');
-      res.setHeader('Content-Disposition', `attachment; filename="audio.webm"`);
-      
-      // Use ytdl-core's stream method which handles authentication
-      const audioStream = ytdl(url, {
-        quality: 'highestaudio',
-        filter: 'audioonly',
-        requestOptions: {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          }
-        }
+      // Get audio stream from play-dl
+      const audioStream = await stream(url, {
+        quality: 2, // High quality audio
+        discordPlayerCompatibility: false,
       });
       
+      // Set response headers for audio streaming
+      res.setHeader('Content-Type', 'audio/webm');
+      res.setHeader('Content-Disposition', `attachment; filename="audio.webm"`);
+      
       // Handle stream errors
-      audioStream.on('error', (error) => {
+      audioStream.stream.on('error', (error) => {
         console.error('Stream error:', error);
         if (!res.headersSent) {
           res.status(500).json({ 
@@ -126,21 +101,15 @@ app.post('/extract-audio', async (req, res) => {
       });
       
       // Pipe the stream directly to response
-      audioStream.pipe(res);
+      audioStream.stream.pipe(res);
       
       // Note: We don't return here - the stream will handle the response
       return;
     } catch (streamError) {
       console.error('Streaming error:', streamError);
-      // Fallback: return URL if streaming fails
-      return res.json({
-        downloadUrl: audioFormat.url,
-        title: videoInfo.videoDetails.title,
-        duration: videoInfo.videoDetails.lengthSeconds,
-        format: {
-          mimeType: audioFormat.mimeType,
-          bitrate: audioFormat.bitrate,
-        }
+      return res.status(500).json({ 
+        error: 'Failed to extract audio',
+        details: streamError.message 
       });
     }
 
@@ -162,22 +131,18 @@ app.get('/extract-audio', async (req, res) => {
       return res.status(400).json({ error: 'URL query parameter is required' });
     }
 
-    if (!ytdl.validateURL(url)) {
+    if (!url || !url.includes('youtube.com') && !url.includes('youtu.be')) {
       return res.status(400).json({ error: 'Invalid YouTube URL' });
     }
 
-    const videoInfo = await ytdl.getInfo(url);
-    const audioFormat = ytdl.chooseFormat(videoInfo.formats, {
-      quality: 'highestaudio',
-      filter: 'audioonly',
+    // Use play-dl to stream audio
+    const audioStream = await stream(url, {
+      quality: 2,
+      discordPlayerCompatibility: false,
     });
-
-    if (!audioFormat || !audioFormat.url) {
-      return res.status(500).json({ error: 'No audio format available' });
-    }
-
-    // Redirect to audio URL
-    res.redirect(audioFormat.url);
+    
+    res.setHeader('Content-Type', 'audio/webm');
+    audioStream.stream.pipe(res);
 
   } catch (error) {
     console.error('Error:', error);
