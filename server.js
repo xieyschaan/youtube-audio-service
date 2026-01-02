@@ -50,6 +50,10 @@ const cors = require('cors');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Scraper.Tech API configuration
+const SCRAPER_TECH_API_KEY = process.env.SCRAPER_TECH_API_KEY;
+const SCRAPER_TECH_API_URL = 'https://api.scraper.tech/youtube';
+
 // Enable CORS for Supabase Edge Functions
 app.use(cors());
 app.use(express.json());
@@ -80,7 +84,79 @@ app.post('/extract-audio', async (req, res) => {
 
     console.log(`Extracting audio from: ${url}`);
 
+    // Try Scraper.Tech first if API key is configured
+    if (SCRAPER_TECH_API_KEY) {
+      try {
+        console.log('Attempting audio extraction via Scraper.Tech...');
+        
+        // Extract video ID from URL
+        const videoIdMatch = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/);
+        const videoId = videoIdMatch ? videoIdMatch[1] : null;
+        
+        if (!videoId) {
+          throw new Error('Could not extract video ID from URL');
+        }
+
+        // Call Scraper.Tech API to get audio download URL
+        const scraperResponse = await fetch(`${SCRAPER_TECH_API_URL}/audio`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SCRAPER_TECH_API_KEY}`,
+          },
+          body: JSON.stringify({
+            url: url,
+            video_id: videoId,
+            format: 'mp3', // Request audio format
+          }),
+        });
+
+        if (scraperResponse.ok) {
+          const scraperData = await scraperResponse.json();
+          
+          // Scraper.Tech returns audio URL or stream
+          if (scraperData.audio_url || scraperData.download_url || scraperData.url) {
+            const audioUrl = scraperData.audio_url || scraperData.download_url || scraperData.url;
+            
+            console.log('Scraper.Tech returned audio URL, downloading...');
+            
+            // Download and stream the audio
+            const audioResponse = await fetch(audioUrl, {
+              headers: {
+                'Referer': url,
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+              }
+            });
+            
+            if (audioResponse.ok) {
+              res.setHeader('Content-Type', 'audio/mpeg');
+              res.setHeader('Content-Disposition', `attachment; filename="audio.mp3"`);
+              audioResponse.body.pipe(res);
+              return;
+            }
+          }
+          
+          // If Scraper.Tech returns stream directly
+          if (scraperResponse.headers.get('content-type')?.startsWith('audio/')) {
+            res.setHeader('Content-Type', scraperResponse.headers.get('content-type'));
+            scraperResponse.body.pipe(res);
+            return;
+          }
+        } else {
+          const errorText = await scraperResponse.text();
+          console.error('Scraper.Tech API error:', scraperResponse.status, errorText);
+          // Fall through to ytdl-core fallback
+        }
+      } catch (scraperError) {
+        console.error('Scraper.Tech extraction failed, falling back to ytdl-core:', scraperError.message);
+        // Fall through to ytdl-core fallback
+      }
+    }
+
+    // Fallback to ytdl-core if Scraper.Tech is not configured or failed
     try {
+      console.log('Using ytdl-core as fallback...');
+      
       // Get video info
       const videoInfo = await ytdl.getInfo(url, {
         requestOptions: {
@@ -101,7 +177,7 @@ app.post('/extract-audio', async (req, res) => {
       }
 
       // Try to stream directly using ytdl
-      console.log('Attempting to stream audio directly...');
+      console.log('Attempting to stream audio directly via ytdl-core...');
       
       try {
         const audioStream = ytdl(url, {
@@ -147,7 +223,7 @@ app.post('/extract-audio', async (req, res) => {
         });
       }
     } catch (error) {
-      console.error('Error:', error);
+      console.error('ytdl-core fallback error:', error);
       throw error;
     }
 

@@ -1,103 +1,44 @@
 # YouTube Audio Extraction Service
 
-A simple Node.js service for extracting audio from YouTube videos. This service is designed to work with the Chop app's automatic transcription feature.
+This service extracts audio from YouTube videos for the Chop app. It uses Scraper.Tech API (paid service) as the primary method, with ytdl-core as a fallback.
 
-## Quick Deploy
+## Setup
 
-### Option 1: Railway (Easiest)
+1. **Get Scraper.Tech API Key:**
+   - Sign up at https://scraper.tech
+   - Get your API key from the dashboard
+   - Free tier: 1,000 requests/month
+   - Basic tier: $2/month for 50,000 requests
 
-1. Go to [Railway](https://railway.app)
-2. Click "New Project" → "Deploy from GitHub repo"
-3. Connect this folder/repo
-4. Railway will auto-detect Node.js and deploy
-5. Copy the deployed URL
-6. Set in Supabase: `npx supabase secrets set YOUTUBE_AUDIO_SERVICE_URL=https://your-app.railway.app/extract-audio`
+2. **Set Environment Variable in Railway:**
+   - Go to your Railway project settings
+   - Add environment variable: `SCRAPER_TECH_API_KEY`
+   - Set value to your Scraper.Tech API key
 
-### Option 2: Render
+3. **Deploy:**
+   - Railway will auto-deploy from GitHub
+   - The service will be available at your Railway URL
 
-1. Go to [Render](https://render.com)
-2. Click "New" → "Web Service"
-3. Connect your repo or paste this code
-4. Set:
-   - **Build Command**: `npm install`
-   - **Start Command**: `npm start`
-5. Deploy and copy URL
-6. Set in Supabase: `npx supabase secrets set YOUTUBE_AUDIO_SERVICE_URL=https://your-app.onrender.com/extract-audio`
+## How It Works
 
-### Option 3: Fly.io
+1. **Primary Method:** Scraper.Tech API
+   - More reliable, bypasses YouTube bot detection
+   - Requires API key
+   - Uses paid credits
 
-```bash
-# Install flyctl
-# Then:
-fly launch
-fly deploy
-```
-
-### Option 4: Vercel (Serverless)
-
-1. Install Vercel CLI: `npm i -g vercel`
-2. Run: `vercel`
-3. Follow prompts
-4. Copy URL and set in Supabase
-
-## Local Development
-
-```bash
-npm install
-npm start
-```
-
-Test:
-```bash
-curl -X POST http://localhost:3000/extract-audio \
-  -H "Content-Type: application/json" \
-  -d '{"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}'
-```
-
-## Configuration
-
-After deployment, configure in Supabase:
-
-```bash
-# Set your service URL
-npx supabase secrets set YOUTUBE_AUDIO_SERVICE_URL=https://your-service-url.com/extract-audio
-
-# Optional: If you add API key authentication
-npx supabase secrets set YOUTUBE_AUDIO_SERVICE_API_KEY=your-api-key
-```
+2. **Fallback Method:** ytdl-core
+   - Free but may be blocked by YouTube
+   - Used if Scraper.Tech fails or is not configured
 
 ## API Endpoints
 
-### POST /extract-audio
-Extract audio from YouTube video
+- `POST /extract-audio` - Extract audio from YouTube URL
+  - Body: `{ "url": "https://youtube.com/watch?v=..." }`
+  - Returns: Audio stream (Content-Type: audio/mpeg or audio/webm)
 
-**Request:**
-```json
-{
-  "url": "https://www.youtube.com/watch?v=VIDEO_ID"
-}
-```
+- `GET /health` - Health check endpoint
 
-**Response:**
-```json
-{
-  "downloadUrl": "https://...",
-  "title": "Video Title",
-  "duration": "3600",
-  "format": {
-    "mimeType": "audio/webm",
-    "bitrate": 128000
-  }
-}
-```
+## Environment Variables
 
-### GET /health
-Health check endpoint
-
-## Notes
-
-- This service uses `@distube/ytdl-core` which may occasionally be blocked by YouTube
-- For production, consider adding rate limiting and authentication
-- Monitor your service for YouTube bot detection issues
-- Consider using a service with IP rotation for better reliability
-
+- `SCRAPER_TECH_API_KEY` - Your Scraper.Tech API key (optional, but recommended)
+- `PORT` - Server port (default: 3000)
