@@ -44,18 +44,11 @@ if (typeof File === 'undefined') {
 }
 
 const express = require('express');
-const YTDlpWrap = require('yt-dlp-wrap').default;
+const ytdl = require('@distube/ytdl-core');
 const cors = require('cors');
-const fs = require('fs');
-const path = require('path');
-const { Readable } = require('stream');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-// Initialize yt-dlp-wrap
-// It will automatically download yt-dlp binary if not present
-const ytDlpWrap = new YTDlpWrap();
 
 // Enable CORS for Supabase Edge Functions
 app.use(cors());
@@ -80,47 +73,82 @@ app.post('/extract-audio', async (req, res) => {
       return res.status(400).json({ error: 'Invalid YouTube URL' });
     }
 
+    // Validate YouTube URL
+    if (!ytdl.validateURL(url)) {
+      return res.status(400).json({ error: 'Invalid YouTube URL' });
+    }
+
     console.log(`Extracting audio from: ${url}`);
 
     try {
-      // Use yt-dlp to extract audio - it's the most robust against YouTube's bot detection
-      console.log('Extracting audio using yt-dlp...');
-      
-      // Use yt-dlp to get audio stream
-      // yt-dlp-wrap can stream directly, but we'll use execStream for better control
-      const audioStream = ytDlpWrap.execStream([
-        url,
-        '-f', 'bestaudio/best', // Best audio format
-        '--no-playlist', // Don't download playlists
-        '-o', '-', // Output to stdout
-      ]);
-      
-      // Set response headers for audio streaming
-      res.setHeader('Content-Type', 'audio/webm');
-      res.setHeader('Content-Disposition', `attachment; filename="audio.webm"`);
-      
-      // Handle stream errors
-      audioStream.on('error', (error) => {
-        console.error('Stream error:', error);
-        if (!res.headersSent) {
-          res.status(500).json({ 
-            error: 'Failed to stream audio',
-            details: error.message 
-          });
+      // Get video info
+      const videoInfo = await ytdl.getInfo(url, {
+        requestOptions: {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          }
         }
       });
-      
-      // Pipe the stream directly to response
-      audioStream.pipe(res);
-      
-      // Note: We don't return here - the stream will handle the response
-      return;
-    } catch (streamError) {
-      console.error('Streaming error:', streamError);
-      return res.status(500).json({ 
-        error: 'Failed to extract audio',
-        details: streamError.message 
+
+      // Find best audio format
+      const audioFormat = ytdl.chooseFormat(videoInfo.formats, {
+        quality: 'highestaudio',
+        filter: 'audioonly',
       });
+
+      if (!audioFormat || !audioFormat.url) {
+        return res.status(500).json({ error: 'No audio format available for this video' });
+      }
+
+      // Try to stream directly using ytdl
+      console.log('Attempting to stream audio directly...');
+      
+      try {
+        const audioStream = ytdl(url, {
+          quality: 'highestaudio',
+          filter: 'audioonly',
+          requestOptions: {
+            headers: {
+              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+              'Referer': url,
+              'Origin': 'https://www.youtube.com',
+            }
+          }
+        });
+        
+        res.setHeader('Content-Type', audioFormat.mimeType || 'audio/webm');
+        res.setHeader('Content-Disposition', `attachment; filename="audio.webm"`);
+        
+        audioStream.on('error', (error) => {
+          console.error('Stream error:', error);
+          if (!res.headersSent) {
+            // Fallback to returning URL
+            return res.json({
+              downloadUrl: audioFormat.url,
+              title: videoInfo.videoDetails.title,
+              duration: videoInfo.videoDetails.lengthSeconds,
+            });
+          }
+        });
+        
+        audioStream.pipe(res);
+        return;
+      } catch (streamError) {
+        console.error('Direct streaming failed, returning URL:', streamError.message);
+        // Fallback: return URL
+        return res.json({
+          downloadUrl: audioFormat.url,
+          title: videoInfo.videoDetails.title,
+          duration: videoInfo.videoDetails.lengthSeconds,
+          format: {
+            mimeType: audioFormat.mimeType,
+            bitrate: audioFormat.bitrate,
+          }
+        });
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      throw error;
     }
 
   } catch (error) {
@@ -141,17 +169,15 @@ app.get('/extract-audio', async (req, res) => {
       return res.status(400).json({ error: 'URL query parameter is required' });
     }
 
-    if (!url || !url.includes('youtube.com') && !url.includes('youtu.be')) {
+    if (!ytdl.validateURL(url)) {
       return res.status(400).json({ error: 'Invalid YouTube URL' });
     }
 
-    // Use yt-dlp to stream audio
-    const audioStream = ytDlpWrap.execStream([
-      url,
-      '-f', 'bestaudio/best',
-      '--no-playlist',
-      '-o', '-',
-    ]);
+    // Use ytdl to stream audio
+    const audioStream = ytdl(url, {
+      quality: 'highestaudio',
+      filter: 'audioonly',
+    });
     
     res.setHeader('Content-Type', 'audio/webm');
     audioStream.pipe(res);
