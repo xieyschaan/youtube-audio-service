@@ -10,6 +10,39 @@
  * 4. Set YOUTUBE_AUDIO_SERVICE_URL in Supabase to your deployed URL
  */
 
+// Polyfill for File API in Node.js < 20
+if (typeof File === 'undefined') {
+  global.File = class File {
+    constructor(bits, name, options = {}) {
+      this.name = name;
+      this.lastModified = options.lastModified || Date.now();
+      this.size = bits.reduce((acc, bit) => acc + (bit.byteLength || bit.size || 0), 0);
+      this.type = options.type || '';
+      this._bits = bits;
+    }
+    
+    stream() {
+      return new ReadableStream({
+        start(controller) {
+          for (const bit of this._bits) {
+            controller.enqueue(bit);
+          }
+          controller.close();
+        }
+      });
+    }
+    
+    arrayBuffer() {
+      return Promise.resolve(
+        this._bits.reduce((acc, bit) => {
+          const buf = Buffer.from(bit);
+          return Buffer.concat([acc, buf]);
+        }, Buffer.alloc(0))
+      );
+    }
+  };
+}
+
 const express = require('express');
 const ytdl = require('@distube/ytdl-core');
 const cors = require('cors');
