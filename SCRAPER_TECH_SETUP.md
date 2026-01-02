@@ -33,46 +33,53 @@ The "Download All in One!" API supports YouTube audio/video downloads.
 4. **Check API Documentation:**
    - Click on "Download All in One!" in the marketplace
    - Click "Playground" or "Docs" to see:
-     - Exact endpoint URL (likely `/download` or similar)
-     - Request format (probably needs `url`, `platform: 'youtube'`, `format: 'audio'`)
-     - Response format (should return download URL or stream)
-     - Authentication method
+     - Exact endpoint URL (code uses `/download/get-info`)
+     - Request format: `{ "url": "https://youtube.com/watch?v=..." }`
+     - Response format: `{ "error": false, "download_url": "...", "type": "video", ... }`
+     - Authentication method (Bearer token or X-API-Key header)
 
 5. **Update Railway Environment Variable:**
    - Add `SCRAPER_TECH_API_KEY` with your API key
 
 6. **Update Code if Needed:**
-   - The current code uses: `https://api.scraper.tech/download`
+   - The current code uses: `https://api.scraper.tech/download/get-info`
    - If Scraper.Tech uses a different endpoint, update `server.js`:
      ```javascript
-     const SCRAPER_TECH_API_URL = 'https://api.scraper.tech/download'; // Update this
+     const SCRAPER_TECH_API_URL = 'https://api.scraper.tech/download/get-info'; // Update this
      ```
 
-## Common API Endpoint Patterns
+## API Response Format
 
-The "Download All in One!" API might use:
-- `POST https://api.scraper.tech/download`
-- `POST https://api.scraper.tech/api/download`
-- `POST https://api.scraper.tech/v1/download`
+Based on the documentation, the API returns:
+```json
+{
+  "error": false,
+  "hosting": "youtube",
+  "shortcode": "https://youtube.com/watch?v=...",
+  "type": "video",
+  "download_url": "https://...",
+  "thumb": "https://...",
+  "duration": 123.456
+}
+```
 
-Check their documentation for the exact format!
+The code extracts `download_url` from this response.
 
 ## Request Format
 
 The code currently sends:
 ```json
 {
-  "url": "https://youtube.com/watch?v=...",
-  "platform": "youtube",
-  "format": "audio",
-  "quality": "highest"
+  "url": "https://youtube.com/watch?v=..."
 }
 ```
 
-**Important:** Check Scraper.Tech's "Download All in One!" API documentation for the exact request format. It might need:
-- Different field names
-- Different format values (e.g., "mp3", "m4a", "bestaudio")
-- Additional parameters
+**Note:** The API may support additional parameters like:
+- `format`: "audio" or "video"
+- `quality`: "highest", "medium", "lowest"
+- `platform`: "youtube"
+
+Check Scraper.Tech's documentation to see if these parameters are supported and can improve audio extraction.
 
 ## Response Format
 

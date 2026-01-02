@@ -54,8 +54,8 @@ const PORT = process.env.PORT || 3000;
 // Use "Download All in One!" API (⭐ 5.0) from https://scraper.tech/en/marketplace/
 // The YouTube API only provides metadata, not downloads
 const SCRAPER_TECH_API_KEY = process.env.SCRAPER_TECH_API_KEY;
-// Check Scraper.Tech docs for exact endpoint - likely /download or similar
-const SCRAPER_TECH_API_URL = 'https://api.scraper.tech/download';
+// Endpoint: "Get Info" - returns download_url in response
+const SCRAPER_TECH_API_URL = 'https://api.scraper.tech/download/get-info';
 
 // Enable CORS for Supabase Edge Functions
 app.use(cors());
@@ -90,64 +90,61 @@ app.post('/extract-audio', async (req, res) => {
     // Try Scraper.Tech first if API key is configured
     if (SCRAPER_TECH_API_KEY) {
       try {
-        console.log('Attempting audio extraction via Scraper.Tech...');
+        console.log('Attempting audio extraction via Scraper.Tech Download All in One API...');
         
-        // Extract video ID from URL
-        const videoIdMatch = url.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/);
-        const videoId = videoIdMatch ? videoIdMatch[1] : null;
-        
-        if (!videoId) {
-          throw new Error('Could not extract video ID from URL');
-        }
-
         // Call Scraper.Tech "Download All in One!" API
-        // This API supports YouTube audio/video downloads
-        // Check Scraper.Tech docs for exact endpoint and request format
+        // API format based on documentation: returns { error: false, download_url: "...", type: "video", ... }
         const scraperResponse = await fetch(SCRAPER_TECH_API_URL, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${SCRAPER_TECH_API_KEY}`,
-            'X-API-Key': SCRAPER_TECH_API_KEY, // Some APIs use this header
+            'X-API-Key': SCRAPER_TECH_API_KEY, // Try both headers
           },
           body: JSON.stringify({
             url: url,
-            platform: 'youtube',
-            format: 'audio', // Request audio format (mp3, m4a, etc.)
-            quality: 'highest',
           }),
         });
 
         if (scraperResponse.ok) {
           const scraperData = await scraperResponse.json();
           
-          // Scraper.Tech returns audio URL or stream
-          if (scraperData.audio_url || scraperData.download_url || scraperData.url) {
-            const audioUrl = scraperData.audio_url || scraperData.download_url || scraperData.url;
+          // Check for errors in response
+          if (scraperData.error === true) {
+            throw new Error(scraperData.message || 'Scraper.Tech API returned an error');
+          }
+          
+          // API returns download_url field (as shown in documentation)
+          if (scraperData.download_url) {
+            const audioUrl = scraperData.download_url;
             
-            console.log('Scraper.Tech returned audio URL, downloading...');
+            console.log('Scraper.Tech returned download URL, streaming audio...');
             
             // Download and stream the audio
             const audioResponse = await fetch(audioUrl, {
               headers: {
                 'Referer': url,
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Origin': 'https://www.youtube.com',
               }
             });
             
             if (audioResponse.ok) {
-              res.setHeader('Content-Type', 'audio/mpeg');
-              res.setHeader('Content-Disposition', `attachment; filename="audio.mp3"`);
+              // Determine content type from response or use default
+              const contentType = audioResponse.headers.get('content-type') || 
+                                 (scraperData.type === 'video' ? 'video/mp4' : 'audio/mpeg');
+              
+              res.setHeader('Content-Type', contentType);
+              res.setHeader('Content-Disposition', `attachment; filename="audio.${contentType.includes('mp4') ? 'mp4' : 'mp3'}"`);
+              
+              // Stream the audio directly
               audioResponse.body.pipe(res);
               return;
+            } else {
+              throw new Error(`Failed to download audio from Scraper.Tech URL: ${audioResponse.status}`);
             }
-          }
-          
-          // If Scraper.Tech returns stream directly
-          if (scraperResponse.headers.get('content-type')?.startsWith('audio/')) {
-            res.setHeader('Content-Type', scraperResponse.headers.get('content-type'));
-            scraperResponse.body.pipe(res);
-            return;
+          } else {
+            throw new Error('Scraper.Tech API did not return download_url');
           }
         } else {
           const errorText = await scraperResponse.text();
