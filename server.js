@@ -94,19 +94,45 @@ app.post('/extract-audio', async (req, res) => {
       return res.status(500).json({ error: 'No audio format available for this video' });
     }
 
-    // Stream audio directly instead of returning URL to avoid 403 errors
-    // Set proper headers for the audio stream
-    const audioResponse = await fetch(audioFormat.url, {
-      headers: {
-        'Referer': url,
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Origin': 'https://www.youtube.com',
-      }
-    });
-
-    if (!audioResponse.ok) {
-      // If direct streaming fails, fallback to returning URL
-      console.log('Direct streaming failed, returning URL instead');
+    // Use ytdl-core's built-in streaming to avoid 403 errors
+    // This handles headers and authentication automatically
+    try {
+      console.log('Streaming audio using ytdl-core...');
+      
+      // Set response headers for audio streaming
+      res.setHeader('Content-Type', audioFormat.mimeType || 'audio/webm');
+      res.setHeader('Content-Disposition', `attachment; filename="audio.webm"`);
+      
+      // Use ytdl-core's stream method which handles authentication
+      const audioStream = ytdl(url, {
+        quality: 'highestaudio',
+        filter: 'audioonly',
+        requestOptions: {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          }
+        }
+      });
+      
+      // Handle stream errors
+      audioStream.on('error', (error) => {
+        console.error('Stream error:', error);
+        if (!res.headersSent) {
+          res.status(500).json({ 
+            error: 'Failed to stream audio',
+            details: error.message 
+          });
+        }
+      });
+      
+      // Pipe the stream directly to response
+      audioStream.pipe(res);
+      
+      // Note: We don't return here - the stream will handle the response
+      return;
+    } catch (streamError) {
+      console.error('Streaming error:', streamError);
+      // Fallback: return URL if streaming fails
       return res.json({
         downloadUrl: audioFormat.url,
         title: videoInfo.videoDetails.title,
@@ -117,17 +143,6 @@ app.post('/extract-audio', async (req, res) => {
         }
       });
     }
-
-    // Stream the audio directly - this avoids 403 errors
-    res.setHeader('Content-Type', audioFormat.mimeType || 'audio/webm');
-    res.setHeader('Content-Disposition', `attachment; filename="audio.webm"`);
-    const contentLength = audioResponse.headers.get('content-length');
-    if (contentLength) {
-      res.setHeader('Content-Length', contentLength);
-    }
-    
-    // Pipe the audio stream to the response
-    audioResponse.body.pipe(res);
 
   } catch (error) {
     console.error('Error extracting audio:', error);
