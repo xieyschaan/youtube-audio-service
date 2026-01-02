@@ -51,11 +51,11 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Scraper.Tech API configuration
-// Use the "YouTube API" from https://scraper.tech/en/marketplace/
+// Use "Download All in One!" API (⭐ 5.0) from https://scraper.tech/en/marketplace/
+// The YouTube API only provides metadata, not downloads
 const SCRAPER_TECH_API_KEY = process.env.SCRAPER_TECH_API_KEY;
-// Base URL - check Scraper.Tech docs for exact endpoint
-// Common patterns: /youtube, /youtube/video, /youtube/download
-const SCRAPER_TECH_API_URL = 'https://api.scraper.tech/youtube';
+// Check Scraper.Tech docs for exact endpoint - likely /download or similar
+const SCRAPER_TECH_API_URL = 'https://api.scraper.tech/download';
 
 // Enable CORS for Supabase Edge Functions
 app.use(cors());
@@ -100,10 +100,10 @@ app.post('/extract-audio', async (req, res) => {
           throw new Error('Could not extract video ID from URL');
         }
 
-        // Call Scraper.Tech YouTube API to get audio download URL
-        // Check Scraper.Tech docs for exact endpoint format
-        // Try common patterns: /video, /download, /audio, or just the base URL
-        const scraperResponse = await fetch(`${SCRAPER_TECH_API_URL}/video`, {
+        // Call Scraper.Tech "Download All in One!" API
+        // This API supports YouTube audio/video downloads
+        // Check Scraper.Tech docs for exact endpoint and request format
+        const scraperResponse = await fetch(SCRAPER_TECH_API_URL, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -112,8 +112,8 @@ app.post('/extract-audio', async (req, res) => {
           },
           body: JSON.stringify({
             url: url,
-            video_id: videoId,
-            format: 'audio', // Request audio format
+            platform: 'youtube',
+            format: 'audio', // Request audio format (mp3, m4a, etc.)
             quality: 'highest',
           }),
         });
