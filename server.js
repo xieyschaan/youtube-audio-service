@@ -51,11 +51,15 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Scraper.Tech API configuration
-// Use "Download All in One!" API (⭐ 5.0) from https://scraper.tech/en/marketplace/
-// The YouTube API only provides metadata, not downloads
+// IMPORTANT: "Download All in One!" appears to be platform-specific APIs
+// The host URL indicates which platform (e.g., instagram-downloader-...)
+// You may need to subscribe to a YouTube-specific API or use a different service
 const SCRAPER_TECH_API_KEY = process.env.SCRAPER_TECH_API_KEY;
-// Endpoint: "Get Info" - returns download_url in response
-const SCRAPER_TECH_API_URL = 'https://api.scraper.tech/download/get-info';
+const SCRAPER_TECH_API_HOST = process.env.SCRAPER_TECH_API_HOST; // e.g., youtube-downloader-....scraper.tech
+// If you have a YouTube-specific host, use it. Otherwise, try the generic endpoint
+const SCRAPER_TECH_API_URL = SCRAPER_TECH_API_HOST 
+  ? `https://${SCRAPER_TECH_API_HOST}/get-info`
+  : 'https://api.scraper.tech/download/get-info';
 
 // Enable CORS for Supabase Edge Functions
 app.use(cors());
