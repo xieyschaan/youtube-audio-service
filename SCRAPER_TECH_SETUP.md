@@ -16,19 +16,26 @@ The "Download All in One!" API supports YouTube audio/video downloads.
 
 1. **Sign up at Scraper.Tech:**
    - Go to https://scraper.tech
-   - Create an account
+   - Create an account (you're already logged in as "Xiey Inc")
 
 2. **Subscribe to "Download All in One!" API:**
    - Go to https://scraper.tech/en/marketplace/
    - Find "Download All in One!" (⭐ 5.0)
-   - Click "Pricing" to see plans
-   - Subscribe to a plan
-   - Check if there's a free tier available
+   - Click on it to open the API page
+   - Click the **"Pricing"** button (in the secondary navigation bar)
+   - Subscribe to a plan (check for free tier or paid plans)
+   - **Important:** You must subscribe before you can get an API key
 
 3. **Get Your API Key:**
-   - Go to your Scraper.Tech dashboard
-   - Find your API key for "Download All in One!" API
-   - Copy it
+   - After subscribing, go to your dashboard
+   - Look for "My Services" in the top navigation (you can see it in the top bar)
+   - Or go to your account settings/dashboard
+   - Find "Download All in One!" in your subscribed services
+   - Your API key should be displayed there
+   - If you can't find it, check:
+     - Account Settings → API Keys
+     - My Services → Download All in One → API Key
+     - Or contact Scraper.Tech support
 
 4. **Check API Documentation:**
    - Click on "Download All in One!" in the marketplace
